@@ -45,7 +45,7 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
             tenhou_event["hai"] = copy.deepcopy(tenhou_event[f"hai{actor}"])
 
         if tag == "UN":
-            logs["name"] = [unquote(tenhou_event["n0"]), unquote(tenhou_event["n1"]), unquote(tenhou_event["n2"]), unquote(tenhou_event["n3"])]
+            logs["name"] = [unquote(tenhou_event.get("n0", '玩家0')), unquote(tenhou_event.get("n1", '玩家1')), unquote(tenhou_event.get("n2", '玩家2')), unquote(tenhou_event.get("n3", '玩家3'))]
 
         json_event_bytes = json.dumps(tenhou_event).encode('utf-8')
         logger.info(tenhou_event)
