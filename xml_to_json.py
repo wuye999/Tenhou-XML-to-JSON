@@ -7,7 +7,6 @@ from bridge import TenhouBridge
 from tenhou.utils.converter import (mjai_to_tenhou, mjai_to_tenhou_one,
                                      tenhou_to_mjai, tenhou_to_mjai_one, to_34_array)
 import copy
-from urllib.parse import urlparse, parse_qs
 import requests
 from urllib.parse import parse_qs, urlparse, unquote
 
@@ -56,10 +55,8 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
         for mjai_message in mjai_messages:
             # logger.info(mjai_message)
 
-
             if not mjai_message:
                 continue
-
 
             if mjai_message["type"] == "start_kyoku":
                 tenhou_log = [
@@ -133,9 +130,10 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
                 pai_num = mahjong_to_number[mjai_message["pai"]]
 
                 # New tsumogiri logic
-                tsumogiri = False
-                if tenhou_log[draw_idx] and tenhou_log[draw_idx][-1] == pai_num:
-                    tsumogiri = True
+                # tsumogiri = False
+                # if tenhou_log[draw_idx] and tenhou_log[draw_idx][-1] == pai_num:
+                #     tsumogiri = True
+                tsumogiri = mjai_message.get("tsumogiri", False)
 
                 # Fix IndexError: check if discard list is not empty before accessing last element
                 if tenhou_log[discard_idx] and tenhou_log[discard_idx][-1] == 'r':

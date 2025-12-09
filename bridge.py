@@ -323,7 +323,7 @@ Tenhou message format:
         else:
             index = int(tag[1:])
         pai = tenhou_to_mjai_one(index)
-        tsumogiri = str.isupper(tag[0]) if actor != self.state.seat else index == self.state.hand[-1]
+        tsumogiri =  index == self.state.hand[-1]
         self.state.last_kawa_tile = pai
         # possible_actions = []
 
