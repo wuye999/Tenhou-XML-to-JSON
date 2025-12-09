@@ -126,11 +126,16 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
             if mjai_message["type"] == "dahai":
                 # Map actor to corresponding discard log index
                 discard_log_indices = {0: 6, 1: 9, 2: 12, 3: 15}
+                draw_log_indices = {0: 5, 1: 8, 2: 11, 3: 14}
                 actor = mjai_message["actor"]
                 discard_idx = discard_log_indices[actor]
-                # tsumogiri = mjai_message["tsumogiri"]
-                tsumogiri = False
+                draw_idx = draw_log_indices[actor]
                 pai_num = mahjong_to_number[mjai_message["pai"]]
+
+                # New tsumogiri logic
+                tsumogiri = False
+                if tenhou_log[draw_idx] and tenhou_log[draw_idx][-1] == pai_num:
+                    tsumogiri = True
 
                 # Fix IndexError: check if discard list is not empty before accessing last element
                 if tenhou_log[discard_idx] and tenhou_log[discard_idx][-1] == 'r':
