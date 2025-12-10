@@ -3,6 +3,7 @@ import xml.etree.ElementTree as ET
 import json
 import loguru
 from loguru import logger
+# from logger import logger
 from bridge import TenhouBridge
 from tenhou.utils.converter import (mjai_to_tenhou, mjai_to_tenhou_one,
                                      tenhou_to_mjai, tenhou_to_mjai_one, to_34_array)
@@ -19,7 +20,7 @@ mahjong_to_number = {
         }
 
         
-def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
+def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 1) -> list[dict]:
     logs ={
         "title": ["",""],
         "name": None,
@@ -47,7 +48,7 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
             logs["name"] = [unquote(tenhou_event.get("n0", '玩家0')), unquote(tenhou_event.get("n1", '玩家1')), unquote(tenhou_event.get("n2", '玩家2')), unquote(tenhou_event.get("n3", '玩家3'))]
 
         json_event_bytes = json.dumps(tenhou_event).encode('utf-8')
-        logger.info(tenhou_event)
+        # logger.info(tenhou_event)
         mjai_messages = bridge.parse( json_event_bytes)
         if not mjai_messages:
                 continue
@@ -134,6 +135,10 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
                 # if tenhou_log[draw_idx] and tenhou_log[draw_idx][-1] == pai_num:
                 #     tsumogiri = True
                 tsumogiri = mjai_message.get("tsumogiri", False)
+                # 这里判断最后一次摸牌中是否是副露，也就是判断最后一次摸牌是否是str，如果是则将tsumogiri设为False
+                # 应对mjai_message传过来的错误
+                if tenhou_log[draw_idx] and isinstance(tenhou_log[draw_idx][-1], str):
+                    tsumogiri = False
 
                 # Fix IndexError: check if discard list is not empty before accessing last element
                 if tenhou_log[discard_idx] and tenhou_log[discard_idx][-1] == 'r':
@@ -172,19 +177,21 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
                 actor = mjai_message["actor"]
                 target = mjai_message["target"]
                 pai = mjai_message["pai"]
+                consumed = mjai_message["consumed"]
+                
                 pai_num = str(mahjong_to_number[pai])
+                consumed_num1 = str(mahjong_to_number[consumed[0]])
+                consumed_num2 = str(mahjong_to_number[consumed[1]])
 
-                # (target - actor + 4) % 4
-                # 1: 下家, 2: 対面, 3: 上家
                 relative_pos = (target - actor + 4) % 4
                 
                 pon_str = ""
-                if relative_pos == 1: # Shimocha (next player)
-                    pon_str = f"{pai_num}{pai_num}p{pai_num}"
+                if relative_pos == 3: # Kamicha (previous player)
+                    pon_str = f"p{pai_num}{consumed_num1}{consumed_num2}"
                 elif relative_pos == 2: # Toimen (opposite player)
-                    pon_str = f"{pai_num}p{pai_num}{pai_num}"
-                elif relative_pos == 3: # Kamicha (previous player)
-                    pon_str = f"p{pai_num}{pai_num}{pai_num}"
+                    pon_str = f"{consumed_num1}p{pai_num}{consumed_num2}"
+                elif relative_pos == 1: # Shimocha (next player)
+                    pon_str = f"{consumed_num1}{consumed_num2}p{pai_num}"
 
                 if pon_str:
                     match actor:
@@ -197,20 +204,25 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
                         case 3:
                             tenhou_log[14].append(pon_str)
 
-            if mjai_message["type"] == "kan" or mjai_message["type"] == "daiminkan":
+            if mjai_message["type"] == "daiminkan":
                 actor = mjai_message["actor"]
                 target = mjai_message["target"]
                 pai = mjai_message["pai"]
+                consumed = mjai_message["consumed"]
+
                 pai_num = str(mahjong_to_number[pai])
+                c1 = str(mahjong_to_number[consumed[0]])
+                c2 = str(mahjong_to_number[consumed[1]])
+                c3 = str(mahjong_to_number[consumed[2]])
 
                 relative_pos = (target - actor + 4) % 4
                 kan_str = ""
-                if relative_pos == 1: # Shimocha (next player)
-                    kan_str = f"{pai_num}{pai_num}{pai_num}m{pai_num}"
+                if relative_pos == 3: # Kamicha (previous player)
+                    kan_str = f"m{pai_num}{c1}{c2}{c3}"
                 elif relative_pos == 2: # Toimen (opposite player)
-                    kan_str = f"{pai_num}m{pai_num}{pai_num}{pai_num}"
-                elif relative_pos == 3: # Kamicha (previous player)
-                    kan_str = f"m{pai_num}{pai_num}{pai_num}{pai_num}"
+                    kan_str = f"{c1}m{pai_num}{c2}{c3}"
+                elif relative_pos == 1: # Shimocha (next player)
+                    kan_str = f"{c1}{c2}{c3}m{pai_num}"
 
                 if kan_str:
                     match actor:
@@ -225,10 +237,14 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
 
             if mjai_message["type"] == "ankan":
                 actor = mjai_message["actor"]
-                consumed_pai = mjai_message["consumed"][0]
-                pai_num = str(mahjong_to_number[consumed_pai])
+                consumed = mjai_message["consumed"]
                 
-                ankan_str = f"{pai_num}{pai_num}{pai_num}a{pai_num}"
+                c1 = str(mahjong_to_number[consumed[0]])
+                c2 = str(mahjong_to_number[consumed[1]])
+                c3 = str(mahjong_to_number[consumed[2]])
+                c4 = str(mahjong_to_number[consumed[3]])
+                
+                ankan_str = f"{c1}{c2}{c3}a{c4}"
 
                 discard_log_indices = {0: 6, 1: 9, 2: 12, 3: 15}
                 discard_idx = discard_log_indices[actor]
@@ -236,14 +252,21 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
 
             if mjai_message["type"] == "kakan":
                 actor = mjai_message["actor"]
-                consumed_pai = mjai_message["consumed"][0]
-                pai_num = str(mahjong_to_number[consumed_pai])
-                
-                ankan_str = f"{pai_num}{pai_num}k{pai_num}{pai_num}"
+                pai = mjai_message["pai"]
+                consumed = mjai_message["consumed"]
 
-                discard_log_indices = {0: 6, 1: 9, 2: 12, 3: 15}
-                discard_idx = discard_log_indices[actor]
-                tenhou_log[discard_idx].append(ankan_str)
+                pai_num = str(mahjong_to_number[pai])
+                c1 = str(mahjong_to_number[consumed[0]])
+                c2 = str(mahjong_to_number[consumed[1]])
+                c3 = str(mahjong_to_number[consumed[2]])
+                
+                all_tiles = [c1, c2, c3, pai_num]
+                
+                kakan_str = f"{all_tiles[0]}{all_tiles[1]}k{all_tiles[2]}{all_tiles[3]}"
+
+                draw_log_indices = {0: 6, 1: 9, 2: 12, 3: 15}
+                draw_idx = draw_log_indices[actor]
+                tenhou_log[draw_idx].append(kakan_str)
 
 
             if mjai_message["type"] == "chi":
@@ -252,8 +275,13 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> list[dict]:
                 consumed = mjai_message["consumed"]
 
                 pai_num = str(mahjong_to_number[pai])
-                consumed_pai1_num = str(mahjong_to_number[consumed[0]])
-                consumed_pai2_num = str(mahjong_to_number[consumed[1]])
+                
+                # Sort consumed tiles, treating red fives (51,52,53) as normal fives (15,25,35) for sorting purposes.
+                sort_key = lambda n: {51: 15, 52: 25, 53: 35}.get(n, n)
+                consumed_nums = sorted([mahjong_to_number[c] for c in consumed], key=sort_key)
+                
+                consumed_pai1_num = str(consumed_nums[0])
+                consumed_pai2_num = str(consumed_nums[1])
 
                 chi_str = f"c{pai_num}{consumed_pai1_num}{consumed_pai2_num}"
 
@@ -327,7 +355,7 @@ def main():
 
     if paipu_data:
         log_id = extract_log_id(url)
-        logs = parse_tenhou_xml_to_mjai(paipu_data, 0)
+        logs = parse_tenhou_xml_to_mjai(paipu_data)
         output_filename = f"{log_id}.json"
 
         with open(output_filename, 'w', encoding='utf-8') as f:

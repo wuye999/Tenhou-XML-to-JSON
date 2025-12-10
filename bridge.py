@@ -5,7 +5,8 @@ from typing import Self
 from copy import deepcopy
 from itertools import combinations, permutations
 
-import loguru
+# from ..bridge_base import BridgeBase
+# from ..logger import logger
 from loguru import logger
 
 from tenhou import utils
@@ -323,7 +324,7 @@ Tenhou message format:
         else:
             index = int(tag[1:])
         pai = tenhou_to_mjai_one(index)
-        tsumogiri =  index == self.state.hand[-1]
+        tsumogiri = index == self.state.hand[-1]
         self.state.last_kawa_tile = pai
         # possible_actions = []
 
@@ -336,8 +337,12 @@ Tenhou message format:
         }]
 
         self.state.is_tsumo = False
-        # if actor == self.state.seat:
-        #     self.state.hand.remove(index)
+        if actor == self.state.seat:
+            try:
+                self.state.hand.remove(index)
+            except ValueError:
+                pass
+            # self.state.hand.remove(index)
 
         # t = int(message.get('t', 0))
 
@@ -389,6 +394,11 @@ Tenhou message format:
             if actor == self.state.seat:
                 for i in self.state.hand:
                     if i // 4 == 30:
+                        # try:
+                        #     self.state.hand.remove(i)
+                        #     break
+                        # except ValueError:
+                        #     pass
                         self.state.hand.remove(i)
                         break
             return mjai_messages
@@ -414,8 +424,11 @@ Tenhou message format:
         if actor == self.state.seat:
             # mjai_messages[0]['cannot_dahai'] = self.cannot_dahai_meld(meld, self.state)
 
-            # for i in meld.exposed:
-            #     self.state.hand.remove(i)
+            for i in meld.exposed:
+                try:
+                    self.state.hand.remove(i)
+                except ValueError:
+                    pass
 
             self.state.melds.append(meld)
 
