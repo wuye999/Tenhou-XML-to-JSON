@@ -225,15 +225,14 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 1) -> list[dict]:
                     kan_str = f"{c1}{c2}{c3}m{pai_num}"
 
                 if kan_str:
-                    match actor:
-                        case 0:
-                            tenhou_log[5].append(kan_str)
-                        case 1:
-                            tenhou_log[8].append(kan_str)
-                        case 2:
-                            tenhou_log[11].append(kan_str)
-                        case 3:
-                            tenhou_log[14].append(kan_str)
+                    draw_log_indices = {0: 5, 1: 8, 2: 11, 3: 14}
+                    discard_log_indices = {0: 6, 1: 9, 2: 12, 3: 15}
+                    
+                    draw_idx = draw_log_indices[actor]
+                    discard_idx = discard_log_indices[actor]
+                    
+                    tenhou_log[draw_idx].append(kan_str)
+                    tenhou_log[discard_idx].append(0)
 
             if mjai_message["type"] == "ankan":
                 actor = mjai_message["actor"]
