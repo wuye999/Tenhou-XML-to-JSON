@@ -1,27 +1,39 @@
-# 天凤牌谱 XML 转 JSON 转换器
+# 天凤牌谱 XML 转 tenhou.net/6 JSON 转换器
 
 这是一个 Python 脚本，用于将天凤麻将的牌谱从 XML 格式转换为与 `tenhou.net/6` 兼容的 JSON 格式。
 
 ## 使用方法
 
+### 1. 运行源代码
 直接运行 `xml_parser.py` 脚本。它将处理指定的牌谱数据，并输出转换后的 JSON 文件。
+
+### 2. 运行预编译文件
+或者，您可以从 [GitHub Releases](https://github.com/wuye999/Tenhou-XML-to-JSON/releases/download/latest/default.exe) 下载预编译的 `default.exe` 文件并直接运行。
 
 ---
 
-# Tenhou Replay XML to JSON Converter
+# Tenhou Replay XML to tenhou.net/6 JSON Converter
 
 This is a Python script to convert Tenhou Mahjong replays from XML format to `tenhou.net/6`-compatible JSON format.
 
 ## Usage
 
+### 1. Run from Source
 Run the `xml_parser.py` script directly. It will process the specified replay data and output the converted JSON file.
+
+### 2. Run Pre-compiled Executable
+Alternatively, you can download the pre-compiled `default.exe` from [GitHub Releases](https://github.com/wuye999/Tenhou-XML-to-JSON/releases/download/latest/default.exe) and run it directly.
 
 ---
 
-# 天鳳牌譜 XML を JSON へ変換するコンバーター
+# 天鳳牌譜 XML を tenhou.net/6 JSON へ変換するコンバーター
 
 この Python スクリプトは、天鳳麻雀の牌譜を XML 形式から `tenhou.net/6` 互換の JSON 形式に変換するためのものです。
 
 ## 使い方
 
+### 1. ソースコードから実行
 `xml_parser.py` スクリプトを直接実行してください。指定された牌譜データを処理し、変換後の JSON ファイルを出力します。
+
+### 2. コンパイル済みファイルを実行
+または、[GitHub Releases](https://github.com/wuye999/Tenhou-XML-to-JSON/releases/download/latest/default.exe) からコンパイル済みの `default.exe` ファイルをダウンロードして直接実行することもできます。
