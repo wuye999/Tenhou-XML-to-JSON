@@ -1,6 +1,6 @@
 # 天凤牌谱 XML 转 JSON 转换器
 
-这是一个 Python 脚本，用于将天凤麻将的牌谱从 XML 格式转换为与 `mjai` 兼容的 JSON 格式。
+这是一个 Python 脚本，用于将天凤麻将的牌谱从 XML 格式转换为与 `tenhou.net/6` 兼容的 JSON 格式。
 
 ## 使用方法
 
@@ -10,7 +10,7 @@
 
 # Tenhou Replay XML to JSON Converter
 
-This is a Python script to convert Tenhou Mahjong replays from XML format to `mjai`-compatible JSON format.
+This is a Python script to convert Tenhou Mahjong replays from XML format to `tenhou.net/6`-compatible JSON format.
 
 ## Usage
 
@@ -20,7 +20,7 @@ Run the `xml_parser.py` script directly. It will process the specified replay da
 
 # 天鳳牌譜 XML を JSON へ変換するコンバーター
 
-この Python スクリプトは、天鳳麻雀の牌譜を XML 形式から `mjai` 互換の JSON 形式に変換するためのものです。
+この Python スクリプトは、天鳳麻雀の牌譜を XML 形式から `tenhou.net/6` 互換の JSON 形式に変換するためのものです。
 
 ## 使い方
 
