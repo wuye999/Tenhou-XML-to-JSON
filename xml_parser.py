@@ -18,6 +18,7 @@ from typing import Dict, List, Optional, Any
 from bridge import TenhouBridge
 from tenhou.utils.converter import tenhou_to_mjai
 
+
 # 麻将牌的字符串表示到数字ID的映射
 mahjong_to_number: Dict[str, int] = {
     '1m': 11, '2m': 12, '3m': 13, '4m': 14, '5m': 15, '6m': 16, '7m': 17, '8m': 18, '9m': 19,
@@ -25,6 +26,18 @@ mahjong_to_number: Dict[str, int] = {
     '1s': 31, '2s': 32, '3s': 33, '4s': 34, '5s': 35, '6s': 36, '7s': 37, '8s': 38, '9s': 39,
     "E": 41,  "S": 42,  "W": 43,  "N": 44,  "P": 45,  "F": 46,  "C": 47, # 字牌：东南西北白发中
     '5mr': 51, '5pr': 52, '5sr': 53, # 赤宝牌
+}
+
+
+# 天凤役种ID到名称的映射
+YAKU_MAP: Dict[int, str] = {
+    0: "門前清自摸和", 1: "立直", 2: "一発", 3: "槍槓", 4: "嶺上開花", 5: "海底摸月", 6: "河底撈魚", 7: "平和", 8: "断幺九", 9: "一盃口",
+    10: "自風 東", 11: "自風 南", 12: "自風 西", 13: "自風 北", 14: "場風 東", 15: "場風 南", 16: "場風 西", 17: "場風 北",
+    18: "役牌 白", 19: "役牌 發", 20: "役牌 中", 21: "両立直", 22: "七対子", 23: "混全帯幺九", 24: "一気通貫", 25: "三色同順",
+    26: "三色同刻", 27: "三槓子", 28: "対々和", 29: "三暗刻", 30: "小三元", 31: "混老頭", 32: "二盃口", 33: "純全帯幺九", 34: "混一色", 35: "清一色",
+    36: "人和", 37: "天和", 38: "地和", 39: "大三元", 40: "四暗刻", 41: "四暗刻単騎", 42: "字一色", 43: "緑一色", 44: "清老頭", 45: "九蓮宝燈",
+    46: "純正九蓮宝燈", 47: "国士無双", 48: "国士無双１３面", 49: "大四喜", 50: "小四喜", 51: "四槓子",
+    52: "ドラ", 53: "裏ドラ", 54: "赤ドラ"
 }
 
 
@@ -255,9 +268,20 @@ def _handle_chi(mjai_message: Dict[str, Any], tenhou_log: List[Any]) -> None:
     if actor in draw_log_indices:
         tenhou_log[draw_log_indices[actor]].append(chi_str)
 
-def _handle_agari(tenhou_event: Dict[str, Any], tenhou_log: List[Any]) -> None:
-    """处理 `AGARI` (和牌) 事件。"""
-    if tenhou_log is None:
+def _handle_agari(tenhou_event: Dict[str, Any], tenhou_log: Optional[List[Any]], tenhou_logs: List[List[Any]]) -> None:
+    """处理 `AGARI` (和牌) 事件, 包括一炮多响。"""
+    
+    active_log = tenhou_log
+    is_multi_ron_case = False
+
+    # 一炮多响的启发式判断：当前局日志为空，但存在上一局日志，且上一局以“和了”结束
+    if active_log is None:
+        if tenhou_logs and tenhou_logs[-1][16] and tenhou_logs[-1][16][0] == "和了":
+            active_log = tenhou_logs[-1]
+            is_multi_ron_case = True
+    
+    if active_log is None:
+        # 如果仍然没有有效的日志，则忽略此事件（可能发生在文件开头或其他错误情况）
         return
 
     sc_list = [int(s) for s in tenhou_event['sc'].split(',')]
@@ -265,7 +289,7 @@ def _handle_agari(tenhou_event: Dict[str, Any], tenhou_log: List[Any]) -> None:
 
     who = int(tenhou_event['who'])
     from_who = int(tenhou_event['fromWho'])
-    oya = tenhou_log[0][0] % 4
+    oya = active_log[0][0] % 4
 
     description = _create_agari_description(
         tenhou_event['ten'],
@@ -278,12 +302,34 @@ def _handle_agari(tenhou_event: Dict[str, Any], tenhou_log: List[Any]) -> None:
 
     agari_info = [who, from_who, who, description]
 
-    if tenhou_log[16] and tenhou_log[16][0] == "和了":
-        # 处理一炮多响
-        tenhou_log[16][1] = [x + y for x, y in zip(tenhou_log[16][1], score_changes)]
-        tenhou_log[16].append(agari_info)
+    # 解析并添加役种详情
+    yaku_list_str = tenhou_event.get('yaku')
+    if yaku_list_str:
+        yaku_list = yaku_list_str.split(',')
+        for i in range(0, len(yaku_list), 2):
+            yaku_id = int(yaku_list[i])
+            han = int(yaku_list[i+1])
+            yaku_name = YAKU_MAP.get(yaku_id, f"不明な役{yaku_id}")
+            agari_info.append(f"{yaku_name}({han}飜)")
+
+    yakuman_list_str = tenhou_event.get('yakuman')
+    if yakuman_list_str:
+        yakuman_list = yakuman_list_str.split(',')
+        for y_id in yakuman_list:
+            yaku_id = int(y_id)
+            yaku_name = YAKU_MAP.get(yaku_id, f"不明な役満{yaku_id}")
+            agari_info.append(yaku_name)
+
+    # 如果是多响情况，或当前日志已记录了和牌信息
+    if is_multi_ron_case or (active_log[16] and active_log[16][0] == "和了"):
+        # 累加分数变化
+        # active_log[16][1] = [x + y for x, y in zip(active_log[16][1], score_changes)]
+        # 追加新的和牌者信息
+        active_log[16].append(score_changes)
+        active_log[16].append(agari_info)
     else:
-        tenhou_log[16] = ["和了", score_changes, agari_info]
+        # 记录第一次和牌
+        active_log[16] = ["和了", score_changes, agari_info]
 
 def _handle_ryuukyoku(tenhou_event: Dict[str, Any], tenhou_log: List[Any]) -> None:
     """处理 `RYUUKYOKU` (流局) 事件。"""
@@ -375,7 +421,7 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> Dict[str, Any]
             logs["name"] = [unquote(tenhou_event.get(f"n{i}", f'玩家{i}')) for i in range(4)]
 
         if tag == "AGARI":
-            _handle_agari(tenhou_event, tenhou_log)
+            _handle_agari(tenhou_event, tenhou_log, tenhou_logs)
 
         if tag == "RYUUKYOKU":
             _handle_ryuukyoku(tenhou_event, tenhou_log)
