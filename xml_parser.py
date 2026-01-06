@@ -1,22 +1,18 @@
-## author：madoka
+# author：madoka
 # -*- coding: utf-8 -*-
-"""
-一个独立的脚本，用于从天凤（tenhou.net）下载麻将牌谱（paipu）的XML数据，
-将其解析并转换为特定格式的JSON文件。
-"""
 import xml.etree.ElementTree as ET
 import json
 import copy
 import math
 import requests
+import os
 from loguru import logger
 # from logger import logger
 from urllib.parse import parse_qs, urlparse, unquote
 from typing import Dict, List, Optional, Any
 
-# 依赖于外部的 bridge 和 tenhou.utils 模块
-from bridge import TenhouBridge
-from tenhou.utils.converter import tenhou_to_mjai
+# 引用合并后的单一文件
+from tenhou_merged import TenhouBridge, tenhou_to_mjai
 
 
 # 麻将牌的字符串表示到数字ID的映射
@@ -40,6 +36,39 @@ YAKU_MAP: Dict[int, str] = {
     52: "ドラ", 53: "裏ドラ", 54: "赤ドラ"
 }
 
+DAN_MAP = [
+    "新人", "９級", "８級", "７級", "６級", "５級", "４級", "３級", "２級", "１級",
+    "初段", "二段", "三段", "四段", "五段", "六段", "七段", "八段", "九段", "十段", "天鳳"
+]
+
+def get_rule_disp(go_type: int) -> str:
+    """根据 GO type 解析规则描述字符串。"""
+    # 动态解析
+    
+    # 1. 判定人数 (0x10)
+    人数 = "三" if (go_type & 0x10) else ""
+    
+    # 2. 判定卓等级 (0x20 + 0x80)
+    if (go_type & 0x20) and (go_type & 0x80):
+        卓 = "鳳"
+    elif go_type & 0x20:
+        卓 = "特"
+    elif go_type & 0x80:
+        卓 = "上"
+    else:
+        卓 = "般"
+        
+    # 3. 判定局数 (0x08)
+    局 = "南" if (go_type & 0x08) else "东"
+    
+    # 4. 判定速度 (0x40)
+    速 = "速" if (go_type & 0x40) else ""
+    
+    # 5. 判定喰/赤 (0x04 / 0x02 为 1 表示无，0 表示有)
+    喰 = "喰" if not (go_type & 0x04) else ""
+    赤 = "赤" if not (go_type & 0x02) else ""
+    
+    return f"{卓}{局}{喰}{赤}{速}"
 
 def _create_agari_description(ten_str: str, yaku_str: Optional[str], yakuman_str: Optional[str], who: int, fromWho: int, oya: int) -> str:
     """根据和牌信息生成描述字符串。"""
@@ -373,24 +402,64 @@ def _handle_ryuukyoku(tenhou_event: Dict[str, Any], tenhou_log: List[Any]) -> No
 
 # --- 主解析逻辑 ---
 
-def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> Dict[str, Any]:
+def parse_tenhou_xml_to_mjai(xml_content: str, log_id: str = "") -> Dict[str, Any]:
     """
     将天凤XML牌谱内容解析为Mortal/Akasaka分析器所需的JSON格式。
 
     Args:
         xml_content (str): 从天凤下载的原始XML字符串。
-        actor (int): （未使用）指定玩家视角。
+        log_id (str): 牌谱ID。
 
     Returns:
         Dict[str, Any]: 包含牌谱标题、名称、规则和详细日志的字典。
     """
     logs: Dict[str, Any] = {
+        "ver": 2.3,
+        "ref": log_id,
+        "ratingc": "PF4",
         "title": ["", ""],
         "name": None,
-        "rule": {"disp": "鳳南喰赤", "aka": 1},
+        "rule": {
+            "disp": "",    
+            "aka53": 1,
+            "aka52": 1,
+            "aka51": 1
+        },
+        "lobby": 0,
+        "dan": [],
+        "rate": [],
+        "sx": [],
+        "sc": [],
         "log": None,
     }
+
     root = ET.fromstring(xml_content)
+    
+    # 提取全局信息
+    last_settlement = None
+    for element in root:
+        if element.tag == "GO":
+            go_type = int(element.attrib.get("type", 0))
+            logs["rule"]["disp"] = get_rule_disp(go_type)
+            logs["lobby"] = int(element.attrib.get("lobby", 0))
+        elif element.tag == "UN":
+            logs["name"] = [unquote(element.attrib.get(f"n{i}", "")) for i in range(4)]
+            logs["dan"] = [DAN_MAP[int(d)] for d in element.attrib.get("dan", "0,0,0,0").split(",")]
+            logs["rate"] = [float(r) for r in element.attrib.get("rate", "0,0,0,0").split(",")]
+            logs["sx"] = element.attrib.get("sx", "M,M,M,M").split(",")
+        elif element.tag in ["AGARI", "RYUUKYOKU"]:
+            last_settlement = element
+
+    if last_settlement is not None and "owari" in last_settlement.attrib:
+        owari_data = last_settlement.attrib["owari"].split(",")
+        # owari 格式为 [点数0, 变动0, 点数1, 变动1, ...]
+        # 目标格式为 [终局点数0*100, 变动0, 终局点数1*100, 变动1, ...]
+        sc = []
+        for i in range(0, len(owari_data), 2):
+            sc.append(int(owari_data[i]) * 100)
+            sc.append(float(owari_data[i+1]))
+        logs["sc"] = sc
+
     bridge = TenhouBridge()
 
     tenhou_logs: List[List[Any]] = []
@@ -458,6 +527,36 @@ def parse_tenhou_xml_to_mjai(xml_content: str, actor: int = 0) -> Dict[str, Any]
 
 # --- 网络与文件处理 ---
 
+def save_split_rounds(logs: Dict[str, Any], folder_path: str) -> None:
+    """将整个牌谱拆分为各个小局并保存。"""
+    kaze_names = ["东", "南", "西", "北"]
+    
+    for log_entry in logs['log']:
+        round_index = log_entry[0][0]
+        honba_index = log_entry[0][1]
+        
+        kaze_idx = round_index // 4
+        kyoku_idx = (round_index % 4) + 1
+        
+        # 生成文件名：例如 "东1局" 或 "东1局1本场"
+        filename = f"{kaze_names[kaze_idx]}{kyoku_idx}局"
+        if honba_index > 0:
+            filename += f"{honba_index}本场"
+        
+        round_data = {
+            "title": logs["title"],
+            "name": logs["name"],
+            "rule": logs["rule"],
+            "log": [log_entry]
+        }
+        
+        file_path = os.path.join(folder_path, f"{filename}.json")
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(round_data, f, ensure_ascii=False, separators=(',', ':'))
+        except IOError as e:
+            print(f"保存小局 {filename} 失败: {e}")
+
 def extract_log_id(url: str) -> Optional[str]:
     """从天凤URL中提取牌谱ID。"""
     parsed = urlparse(url)
@@ -510,6 +609,37 @@ def download_paipu_data(original_url: str) -> Optional[str]:
 
 # --- 主程序入口 ---
 
+def save_split_rounds(logs: Dict[str, Any], folder_path: str) -> None:
+    """将整个牌谱拆分为各个小局并保存。"""
+    kaze_names = ["东", "南", "西", "北"]
+    
+    for log_entry in logs['log']:
+        round_index = log_entry[0][0]
+        honba_index = log_entry[0][1]
+        
+        kaze_idx = round_index // 4
+        kyoku_idx = (round_index % 4) + 1
+        
+        # 生成文件名：例如 "东1局" 或 "东1局1本场"
+        filename = f"{kaze_names[kaze_idx]}{kyoku_idx}局"
+        if honba_index > 0:
+            filename += f"{honba_index}本场"
+        
+        round_data = {
+            "title": logs["title"],
+            "name": logs["name"],
+            "rule": logs["rule"],
+            "log": [log_entry]
+        }
+        
+        file_path = os.path.join(folder_path, f"{filename}.json")
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(round_data, f, ensure_ascii=False, separators=(',', ':'))
+            # print(f"已保存小局：{filename}")
+        except IOError as e:
+            print(f"保存小局 {filename} 失败: {e}")
+
 def main() -> None:
     """脚本主函数，处理用户输入、下载、解析和文件保存。"""
     url = input("天凤牌谱URL格式示例：http://tenhou.net/0/?log=2025120632gm-00a9-0000-8f4679af&tw=2\n请输入天凤牌谱URL: ")
@@ -521,18 +651,32 @@ def main() -> None:
             print("无法从URL中提取log_id，无法生成文件名。")
             return
             
-        logs = parse_tenhou_xml_to_mjai(paipu_data)
-        output_filename = f"{log_id}.json"
+        logs = parse_tenhou_xml_to_mjai(paipu_data, log_id)
+        
+        # 创建文件夹
+        if not os.path.exists(log_id):
+            os.makedirs(log_id)
+            print(f"已创建文件夹: {log_id}")
+
+        # 保存完整牌谱
+        output_filename = os.path.join(log_id, f"{log_id}.json")
 
         try:
             with open(output_filename, 'w', encoding='utf-8') as f:
                 json.dump(logs, f, ensure_ascii=False, separators=(',', ':'))
-            print(f"牌谱已成功保存到 {output_filename}")
+            print(f"完整牌谱已保存到 {output_filename}")
+            
+            # 拆分并保存小局
+            save_split_rounds(logs, log_id)
+            print(f"所有小局已成功拆分并保存到文件夹 {log_id} 中。")
+            
         except IOError as e:
             print(f"写入文件失败: {e}")
     else:
         print("未找到有效的牌谱数据，请检查URL是否正确。")
     input("按任意键退出...")
+
+
 
 
 if __name__ == "__main__":
